@@ -1,0 +1,1 @@
+export const geocodingAPI = "https://nominatim.geocoding.ai";
