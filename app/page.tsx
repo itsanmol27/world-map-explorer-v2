@@ -15,13 +15,13 @@ const LazyMap = dynamic(() => import("@/app/components/map"), {
 export default function Home() {
 
   const [selectedPosition, setSelectedPosition] = useState<PositionType>();
-  
+
   return (
     <main>
       {/* <Disclaimer /> */}
       <Header />
       <LeftBar onPlaceSelect={(lat, lng) => setSelectedPosition({ lat, lng })} />
-      <LazyMap />
+      <LazyMap selectedPosition={selectedPosition} />
     </main>
   );
 }

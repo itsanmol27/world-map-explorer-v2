@@ -1,6 +1,5 @@
 "use client";
-
-import { MapContainer, CircleMarker, Popup, TileLayer, GeoJSON, useMapEvent } from "react-leaflet";
+import { MapContainer, CircleMarker, Popup, TileLayer, GeoJSON, useMapEvent, Marker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-defaulticon-compatibility";
 import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css";
@@ -13,24 +12,27 @@ export interface PositionType {
 }
 
 interface MapProps {
-  selectedPosition?: PositionType; // Add this prop
+  selectedPosition?: PositionType;
 }
 
-const Map:React.FC<MapProps> = ({selectedPosition}) => {
+const Map: React.FC<MapProps> = ({ selectedPosition }) => {
   const [position, setPosition] = useState<PositionType>();
   const [borderData, setBorderData] = useState<any>(null);
+  const [selectedBorderData, setSelectedBorderData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  async function updateBorder(lat: number, lng: number) {
+  async function updateBorder(lat: number, lng: number, isSelectedPosition = false) {
     setIsLoading(true);
-    console.log("Fetching border for:", lat, lng);
     try {
       const response = await fetch(
         `${geocodingAPI}/reverse?lat=${lat}&lon=${lng}&zoom=${6}&format=geojson&polygon_geojson=1&polygon_threshold=${1 / Math.pow(10, 3)}`
       );
       const data = await response.json();
-      console.log("Fetched border data:", data);
-      setBorderData(data);
+      if (isSelectedPosition) {
+        setSelectedBorderData(data); // For searched positions
+      } else {
+        setBorderData(data); // For clicked positions
+      }
     } catch (error) {
       console.error("Error fetching border data:", error);
     } finally {
@@ -49,14 +51,18 @@ const Map:React.FC<MapProps> = ({selectedPosition}) => {
           updateBorder(newPosition.lat, newPosition.lng);
         }
       })
-      .catch((error) => {
-        console.log(error);
-      });
+      .catch(console.error);
   }, []);
 
   useEffect(() => {
-    if (position) {
-      console.log("Position changed:", position);
+    if (selectedPosition) {
+      setPosition(selectedPosition);
+      updateBorder(selectedPosition.lat, selectedPosition.lng, true);
+    }
+  }, [selectedPosition]);
+
+  useEffect(() => {
+    if (position && !selectedPosition) {
       updateBorder(position.lat, position.lng);
     }
   }, [position?.lat, position?.lng]);
@@ -65,6 +71,8 @@ const Map:React.FC<MapProps> = ({selectedPosition}) => {
     useMapEvent("click", (e) => {
       const { lat, lng } = e.latlng;
       setPosition({ lat, lng });
+      updateBorder(lat, lng, false);
+
     });
     return null;
   }
@@ -85,31 +93,47 @@ const Map:React.FC<MapProps> = ({selectedPosition}) => {
 
       <CircleMarker
         center={position}
-        radius={4}  // Adjust size (in pixels)
-        fillOpacity={1}  // Fully opaque
-        color="black"  // Border color
-        fillColor="black"  // Fill color
+        radius={4}
+        fillOpacity={1}
+        color="black"
+        fillColor="black"
       >
-        <Popup>
-          This Marker icon is displayed correctly with <i>leaflet-defaulticon-compatibility</i>.
-        </Popup>
+        <Popup>Clicked Location</Popup>
       </CircleMarker>
+
+      {selectedPosition && (
+        <Marker position={selectedPosition}>
+          <Popup>Searched Location</Popup>
+        </Marker>
+      )}
 
       {borderData && !isLoading && (
         <GeoJSON
-          key={`${position.lat}-${position.lng}`}
+          key={`clicked-${position.lat}-${position.lng}`}
           data={borderData}
-          style={() => ({
+          style={{
             color: "blue",
             weight: 2,
-            fillOpacity: 0,
-          })}
+            fillOpacity: 0
+          }}
         />
       )}
 
+      {selectedBorderData && selectedPosition && (
+        <GeoJSON
+          key={`selected-${selectedPosition.lat}-${selectedPosition.lng}`}
+          data={selectedBorderData}
+          style={{
+            color: "red",
+            weight: 2,
+            fillColor: "yellow",
+            fillOpacity: 0.4
+          }}
+        />
+      )}
       <ClickHandler />
     </MapContainer>
   );
-}
+};
 
 export default Map;

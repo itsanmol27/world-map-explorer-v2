@@ -18,13 +18,36 @@ const LeftBar: React.FC<LeftBarProps> = ({ onPlaceSelect }) => {
   const [place, setPlace] = useState<string>();
   const [placeDetails, setPlaceDetails] = useState<[]>([]);
   const [isdistanceModelOpen, setIsdistanceModelOpen] = useState(false);
+  const [entityLabel , setEntityLabel] = useState();
 
   const placesDropdownRef = useRef<HTMLDivElement>(null);
 
   async function findPlace() {
     const response = await axios.get(`${geocodingAPI}/search.php?q=${place}&format=jsonv2&exclude_place_ids=`);
-    console.log(response.data);
     setPlaceDetails(response.data);
+  }
+
+  async function fetchEntityId(lat: number, lon: number) {
+    const url = `https://www.wikidata.org/w/api.php?action=query&list=geosearch&gscoord=${lat}|${lon}&gsradius=1000&gslimit=1&format=json&origin=*`;
+    try {
+      const response = await axios.get(url);
+      if (response.data.query.geosearch.length > 0) {
+        const entityId = response.data.query.geosearch[0].title;
+        await fetchEntityLabel(entityId);
+        return entityId; // This will return the entity ID, e.g., Q42
+      }
+    } catch (error) {
+      console.error("Error fetching entity ID:", error);
+    }
+    return null;
+  }
+
+  async function fetchEntityLabel(entityId: string) {
+    if (!entityId) return null;
+    const url = `https://www.wikidata.org/wiki/Special:EntityData/${entityId}.json`;
+    const response = await fetch(url).then((res) => res.json());
+    setEntityLabel(response.entities?.[entityId]);
+    return response.entities?.[entityId]?.labels?.en || null;
   }
 
   useEffect(() => {
@@ -61,14 +84,19 @@ const LeftBar: React.FC<LeftBarProps> = ({ onPlaceSelect }) => {
         </div>
         {
           placeDetails.length > 0 && (
-            <div className="absolute top-[50px] left-0 w-full bg-white rounded-md shadow-md border border-black z-10 max-h-[200px] overflow-y-auto">
+            <div
+              className="absolute top-[50px] left-0 w-full bg-white rounded-md shadow-md border border-black z-50 max-h-[200px] overflow-y-auto"
+              ref={placesDropdownRef} // Move ref to the parent container
+            >
               {placeDetails.map((place: any) => (
                 <div
-                  ref={placesDropdownRef}
                   key={place.place_id}
                   className="p-2 border-b last:border-none cursor-pointer hover:bg-gray-100"
-                  onClick={() => {
-                    onPlaceSelect(parseFloat(place.lat), parseFloat(place.lon)); // Call the callback
+                  onClick={async(e) => {
+                    e.stopPropagation(); // Prevent event bubbling
+                    setPlaceDetails([]);
+                    onPlaceSelect(parseFloat(place.lat), parseFloat(place.lon));
+                    const entityId = await fetchEntityId(parseFloat(place.lat), parseFloat(place.lon));
                     setPlaceDetails([]);
                   }}
                 >
@@ -77,8 +105,9 @@ const LeftBar: React.FC<LeftBarProps> = ({ onPlaceSelect }) => {
                 </div>
               ))}
             </div>
-          )}
-
+          )
+        }
+        
         {
           isdistanceModelOpen &&
           <div className="box fixed mt-10 ml-4 flex flex-col items-center gap-10" id="box" aria-label="distance finder opened">
