@@ -12,7 +12,7 @@ export interface PositionType {
 }
 
 interface MapProps {
-  selectedPosition?: PositionType;
+  selectedPosition?: PositionType | null;
 }
 
 const Map: React.FC<MapProps> = ({ selectedPosition }) => {

@@ -8,17 +8,98 @@ import { IoIosCloseCircle } from "react-icons/io";
 import { FaCircle } from "react-icons/fa";
 import { FaMapLocationDot } from "react-icons/fa6";
 import { FaArrowCircleRight } from "react-icons/fa";
+import { FaInfoCircle } from "react-icons/fa";
+import { PositionType } from "./map";
 
 interface LeftBarProps {
-  onPlaceSelect: (lat: number, lng: number) => void; // Add this prop
+  setSelectedPosition: (position: PositionType | null) => void;
 }
 
-const LeftBar: React.FC<LeftBarProps> = ({ onPlaceSelect }) => {
+interface EntityLabel {
+  pageid?: number;
+  ns?: number;
+  title?: string;
+  lastrevid?: number;
+  modified?: string;
+  type?: string;
+  id?: string;
+  labels?: {
+    [languageCode: string]: {
+      language: string;
+      value: string;
+    };
+  };
+  descriptions?: {
+    [languageCode: string]: {
+      language: string;
+      value: string;
+    };
+  };
+  aliases?: {
+    [languageCode: string]: Array<{
+      language: string;
+      value: string;
+    }>;
+  };
+  claims?: {
+    [propertyId: string]: Array<{
+      mainsnak: Snak;
+      type: string;
+      id: string;
+      rank: string;
+      references?: Array<{
+        hash: string;
+        snaks: {
+          [propertyId: string]: Snak[];
+        };
+        'snaks-order': string[];
+      }>;
+    }>;
+  };
+  sitelinks?: {
+    [site: string]: {
+      site: string;
+      title: string;
+      badges: string[];
+    };
+  };
+}
+
+interface Snak {
+  snaktype: string;
+  property: string;
+  hash: string;
+  datavalue?: {
+    value: string | {
+      'entity-type': string;
+      'numeric-id': number;
+      id: string;
+    } | {
+      time: string;
+      timezone: number;
+      before: number;
+      after: number;
+      precision: number;
+      calendarmodel: string;
+    } | {
+      latitude: number;
+      longitude: number;
+      altitude: null;
+      precision: number;
+      globe: string;
+    };
+    type: string;
+  };
+  datatype: string;
+}
+
+const LeftBar: React.FC<LeftBarProps> = ({ setSelectedPosition }) => {
 
   const [place, setPlace] = useState<string>();
   const [placeDetails, setPlaceDetails] = useState<[]>([]);
   const [isdistanceModelOpen, setIsdistanceModelOpen] = useState(false);
-  const [entityLabel , setEntityLabel] = useState();
+  const [entityLabel, setEntityLabel] = useState<EntityLabel | null>(null);
+  const [isEntityModalOpen, setIsEntityModalOpen] = useState(false);
 
   const placesDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -27,8 +108,8 @@ const LeftBar: React.FC<LeftBarProps> = ({ onPlaceSelect }) => {
     setPlaceDetails(response.data);
   }
 
-  async function fetchEntityId(lat: number, lon: number) {
-    const url = `https://www.wikidata.org/w/api.php?action=query&list=geosearch&gscoord=${lat}|${lon}&gsradius=1000&gslimit=1&format=json&origin=*`;
+  async function fetchEntityId(lat: number, lng: number) {
+    const url = `https://www.wikidata.org/w/api.php?action=query&list=geosearch&gscoord=${lat}|${lng}&gsradius=1000&gslimit=1&format=json&origin=*`;
     try {
       const response = await axios.get(url);
       if (response.data.query.geosearch.length > 0) {
@@ -47,6 +128,7 @@ const LeftBar: React.FC<LeftBarProps> = ({ onPlaceSelect }) => {
     const url = `https://www.wikidata.org/wiki/Special:EntityData/${entityId}.json`;
     const response = await fetch(url).then((res) => res.json());
     setEntityLabel(response.entities?.[entityId]);
+    console.log(response.entities?.[entityId]);
     return response.entities?.[entityId]?.labels?.en || null;
   }
 
@@ -92,12 +174,14 @@ const LeftBar: React.FC<LeftBarProps> = ({ onPlaceSelect }) => {
                 <div
                   key={place.place_id}
                   className="p-2 border-b last:border-none cursor-pointer hover:bg-gray-100"
-                  onClick={async(e) => {
+                  onClick={async (e) => {
                     e.stopPropagation(); // Prevent event bubbling
                     setPlaceDetails([]);
-                    onPlaceSelect(parseFloat(place.lat), parseFloat(place.lon));
+                    setSelectedPosition({ lat: parseFloat(place.lat), lng: parseFloat(place.lon) });
                     const entityId = await fetchEntityId(parseFloat(place.lat), parseFloat(place.lon));
-                    setPlaceDetails([]);
+                    if (entityId) {
+                      setIsEntityModalOpen(true);
+                    }
                   }}
                 >
                   <h1 className="font-semibold">{place.display_name}</h1>
@@ -107,7 +191,104 @@ const LeftBar: React.FC<LeftBarProps> = ({ onPlaceSelect }) => {
             </div>
           )
         }
-        
+
+{
+  isEntityModalOpen && entityLabel && (
+    <div className="box fixed mt-10 ml-4 flex flex-col items-start gap-4 w-[300px] bg-white p-4 rounded-md shadow-lg border border-gray-200" aria-label="place information opened">
+      {/* Close Button - Now properly positioned inside the box */}
+      <button
+        onClick={() => { setIsEntityModalOpen(false); setEntityLabel(null); setSelectedPosition(null) }}
+        className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 transition-colors"
+        id="closeEntityBtn"
+        aria-label="close place information"
+      >
+        <IoIosCloseCircle className="text-xl" />
+      </button>
+
+      {/* Header */}
+      <div className="w-full">
+        <h1 className="text-xl font-semibold flex items-center gap-2">
+          <FaInfoCircle className="text-blue-500" />
+          Place Information
+        </h1>
+      </div>
+
+      {/* Main Content */}
+      <div className="w-full p-3 bg-blue-50 rounded-md">
+        <h2 className="font-bold text-lg mb-1">{entityLabel.labels?.en?.value || "Unknown Place"}</h2>
+        {entityLabel.descriptions?.en?.value && (
+          <p className="text-sm text-gray-600">{entityLabel.descriptions.en.value}</p>
+        )}
+      </div>
+
+      {/* Details */}
+      <div className="w-full space-y-3">
+        {entityLabel.claims?.P31 && (
+          <div className="flex items-start">
+            <span className="font-semibold min-w-[100px]">Type:</span>
+            <span>
+              {typeof entityLabel.claims.P31[0].mainsnak.datavalue?.value === 'object' &&
+                'id' in entityLabel.claims.P31[0].mainsnak.datavalue.value
+                ? entityLabel.claims.P31[0].mainsnak.datavalue.value.id.replace("Q", "")
+                : "Unknown"}
+            </span>
+          </div>
+        )}
+
+        {entityLabel.claims?.P17 && (
+          <div className="flex items-start">
+            <span className="font-semibold min-w-[100px]">Country:</span>
+            <span>
+              {typeof entityLabel.claims.P17[0].mainsnak.datavalue?.value === 'object' &&
+                'id' in entityLabel.claims.P17[0].mainsnak.datavalue.value
+                ? entityLabel.claims.P17[0].mainsnak.datavalue.value.id.replace("Q", "")
+                : "Unknown"}
+            </span>
+          </div>
+        )}
+
+        {entityLabel.claims?.P571?.[0]?.mainsnak?.datavalue?.value && (
+          <div className="flex items-start">
+            <span className="font-semibold min-w-[100px]">Established:</span>
+            <span>
+              {(() => {
+                try {
+                  const value = entityLabel.claims.P571[0].mainsnak.datavalue.value;
+                  if (typeof value === 'object' && 'time' in value) {
+                    const year = new Date(value.time).getFullYear();
+                    return isNaN(year) ? "Unknown" : year.toString();
+                  }
+                  return "Unknown";
+                } catch {
+                  return "Unknown";
+                }
+              })()}
+            </span>
+          </div>
+        )}
+
+        {entityLabel.claims?.P856 && (
+          <div className="flex items-start">
+            <span className="font-semibold min-w-[100px]">Website:</span>
+            {typeof entityLabel.claims.P856[0].mainsnak.datavalue?.value === 'string' ? (
+              <a
+                href={entityLabel.claims.P856[0].mainsnak.datavalue.value}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:underline text-sm break-all"
+              >
+                {entityLabel.claims.P856[0].mainsnak.datavalue.value}
+              </a>
+            ) : (
+              <span>Unknown</span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
         {
           isdistanceModelOpen &&
           <div className="box fixed mt-10 ml-4 flex flex-col items-center gap-10" id="box" aria-label="distance finder opened">
